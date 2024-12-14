@@ -14,55 +14,102 @@ class Gateway:
         self.host = host
         self.port = port
         self.agents_certificates = {}  # Armazena certificados emitidos para os agentes
+        self.agents_public_keys = {}  # Armazena chaves públicas dos agentes
         self.public_key, self.private_key = generate_keypair()
         
         # senha secreta aleatória
         secret_key = os.urandom(32)
-        encrypted_private_key = encrypt_private_key(self.private_key, secret_key)     
+        gateway_enc_pr_key = encrypt_private_key(self.private_key, secret_key)     
         print("Chave privada encriptada guardada com sucesso! ")
         
         # Criação da expiration_date para expirar após 1 hora da criação do certificado
         self.expiration_date = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
         
         self.certificate = create_certificate("Gateway", self.public_key, self.expiration_date, self.private_key)
-        certificate_pem = self.certificate.public_bytes(
-            encoding=serialization.Encoding.PEM
-            )
-        with open("gateway_cert.pem", "wb") as file:
-            f.write(certificate_pem)
+        saved_certificate = self.certificate
         print("Certificado do Gateway criado com sucesso! ")
+        
+        # Guardar o certificado num ficheiro
+        with open("gateway_cert.pem", "wb") as cert_file:
+            cert_file.write(saved_certificate.public_bytes(serialization.Encoding.PEM))
+        print("Certificado guardado em gateway_certificate.pem")
         
     def get_public_key(self):
         return self.public_key
+    
+    
+    def receive_agent_key(self, conn, addr):
+        # Receber chave pública do agente
+        try:
+            agent_public_key = pickle.loads(conn.recv(16384))
+            print("Chave pública recebida e carregada com sucesso! ")
+            self.agents_public_keys[addr] = deserialize_public_key(agent_public_key)
+        except Exception as e:
+            print(f"Erro ao receber chave pública do agente: {e}")
+            
+            
+    def receive_agent_cert_request(self, conn, addr):
+        # Receber CSR do agente
+        try:
+            csr = pickle.loads(conn.recv(16384))
+            print(f"CSR Received: {csr}")  # Debug message
+            csr_agent_name = csr.agent_name
+            csr_public_key = deserialize_public_key(csr.public_key)
+            # Verificar se a public key no CSR é igual à public key recebida
+            if csr_public_key != self.agents_public_keys[addr]:
+                raise ValueError("A chave pública no CSR " + {csr_public_key} + " não corresponde à chave pública recebida" + {self.agents_public_keys[addr]})
+            print(f"CSR do agente {addr} recebido com sucesso! ")
+            
+            # Criar um certificado para o agente
+            print(f"Agent Name: {csr.agent_name}")
+            print(f"Public Key: {csr_public_key}")
+            agent_certificate = create_certificate(csr_agent_name, csr_public_key, self.expiration_date, self.private_key)
+            print(f"Certificado do agente {addr} criado com sucesso! ")
+            
+            # Guardar o certificado do agente
+            self.agents_certificates[addr] = agent_certificate
+            
+            serialized_agent_certificate = serialize_certificate(agent_certificate)
+            serialized_gateway_certificate = serialize_certificate(self.certificate)
+            
+            # Enviar o certificado deste agente e da gateway para o agente
+            conn.sendall(pickle.dumps(serialized_agent_certificate))
+            print("Certificado do agente enviado!")  # Debug message
+            # Solicitar ACK do agente
+            ack = conn.recv(1024)
+            if ack != b"ACK":
+                raise ValueError("Erro ao receber ACK do agente")
+            print("ACK recebido com sucesso! ")
+            
+            # Enviar o certificado da Gateway para o agente
+            conn.sendall(pickle.dumps(serialized_gateway_certificate))
+            print(f"Certificados enviados para o agente {addr}, {csr_agent_name} ")
+        
+        except Exception as e:
+            print(f"Erro ao receber CSR do agente {addr}: {e}")
         
 
     def handle_agent(self, conn, addr):
         """Processar uma conexão de agente e emitir um certificado."""
         try:
-            # Receber CSR do agente
-            csr = pickle.loads(conn.recv(4096))
-            if isinstance(csr, CSR):
-                print(f"Recebido CSR do agente {csr.agent_name}")
-
-                # Desserializar a chave pública do CSR
-                agent_public_key = deserialize_public_key(csr.public_key_pem)
-
-                # Gerar certificado do agente
-                agent_certificate = Certificate(
-                    name=csr.agent_name,
-                    public_key_pem=serialize_public_key(agent_public_key),
-                    signature=sign_data(csr.agent_name.encode(), self.private_key)
-                )
-                self.agents_certificates[csr.agent_name] = agent_certificate
-
-                # Enviar certificados de volta ao agente
-                response = pickle.dumps((agent_certificate, self.certificate))
-                conn.sendall(response)
-                print(f"Certificado emitido para o agente: {csr.agent_name}")
+            #Receber conexão do agente
+            print(f"Conexão estabelecida com o agente {addr}")
+            
+            # Receber a chave pública do agente
+            self.receive_agent_key(conn, addr)
+            
+            # Enviar ACK para o agente
+            conn.sendall(b"ACK")
+            print("ACK enviado para o agente! ")
+            
+            # Receber o CSR do agente e emitir um certificado
+            self.receive_agent_cert_request(conn, addr)
+          
         except Exception as e:
             print(f"Erro ao lidar com o agente {addr}: {e}")
         finally:
             conn.close()
+
 
     def start(self):
         print(f"Servidor Gateway iniciado em {self.host}:{self.port}")

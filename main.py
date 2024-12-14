@@ -11,6 +11,7 @@ if __name__ == "__main__":
     elif mode == "agent":
         name = input("Insira o nome do agente: ").strip()
         agent = Agent(name)
-        agent.request_certificate()
+        agent.create_connection()
+        agent.show_options()
     else:
         print("Modo inválido.")

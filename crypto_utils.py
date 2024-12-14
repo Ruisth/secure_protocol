@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography import x509
 from messages import Certificate
+from cryptography.x509.oid import NameOID
 
 
 def generate_keypair():
@@ -31,11 +32,9 @@ def sign_data(data, private_key):
 # create a certificate with the name, expiration date, public key and issuer private key to sign the certificate
 def create_certificate(name, public_key, expiration_date, issuer_private_key):
     subject = issuer = x509.Name([
-        x509.NameAttribute(x509.NameOID.COMMON_NAME, name),
-        x509.NameAttribute(x509.NameOID.SERIAL_NUMBER, str(datetime.datetime.now(datetime.timezone.utc))),
-        x509.NameAttribute(x509.NameOID.POSTAL_CODE, str(expiration_date)),
-        x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, str(public_key))
+        x509.NameAttribute(NameOID.COMMON_NAME, name),
     ])
+    
     builder = x509.CertificateBuilder(
         subject_name=subject,
         issuer_name=issuer,
@@ -44,32 +43,39 @@ def create_certificate(name, public_key, expiration_date, issuer_private_key):
         not_valid_before=datetime.datetime.now(datetime.timezone.utc),
         not_valid_after=expiration_date,
     )
-    signature = builder.sign(private_key=issuer_private_key, algorithm=hashes.SHA256())
-    return Certificate(name, public_key, expiration_date, signature)
+    
+    # Add extensions for additional information
+    builder = builder.add_extension(
+        x509.SubjectAlternativeName([x509.DNSName(name)]),
+        critical=False,
+    )
+    
+    # Sign the certificate with the issuer's private key
+    certificate = builder.sign(private_key=issuer_private_key, algorithm=hashes.SHA256())
+    
+    return certificate
 
 
+# Serialization for public key
 def serialize_public_key(public_key):
-    """Serializa a chave pública em formato PEM."""
     return public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
+    
+# Deserialization for public key
+def deserialize_public_key(public_key_bytes):
+    return serialization.load_pem_public_key(public_key_bytes, backend=default_backend())
 
 
-def deserialize_public_key(pem_data):
-    """Desserializa a chave pública a partir do formato PEM."""
-    return serialization.load_pem_public_key(pem_data)
+# Serialization of certificate
+def serialize_certificate(certificate):
+    return certificate.public_bytes(serialization.Encoding.PEM)
 
 
-def serialize_private_key(private_key):
-    """Serializa a chave privada em formato PEM."""
-    return private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()
-    )
+# Deserialization of certificate
+def deserialize_certificate(certificate_bytes):
+    return x509.load_pem_x509_certificate(certificate_bytes)
 
 
-def deserialize_private_key(pem_data):
-    """Desserializa a chave privada a partir do formato PEM."""
-    return serialization.load_pem_private_key(pem_data, password=None)
+    
