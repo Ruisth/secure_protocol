@@ -93,6 +93,7 @@ class Gateway:
         """Processar uma conexão de agente e emitir um certificado."""
         try:
             #Receber conexão do agente
+            print(" ")
             print(f"Conexão estabelecida com o agente {addr}")
             
             # Receber a chave pública do agente
@@ -116,7 +117,7 @@ class Gateway:
         
         # Adiciona o tratamento de sinal para capturar o Ctrl+C
         def signal_handler(sig, frame):
-            print("\nInterrompendo o servidor...")
+            print("\nInterrompendo a gateway...")
             sys.exit(0)  # Termina o programa
 
         # Registra o manipulador para o sinal SIGINT (Ctrl+C)

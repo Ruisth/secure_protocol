@@ -31,8 +31,12 @@ def sign_data(data, private_key):
 
 # create a certificate with the name, expiration date, public key and issuer private key to sign the certificate
 def create_certificate(name, public_key, expiration_date, issuer_private_key):
-    subject = issuer = x509.Name([
+    subject = x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, name),
+    ])
+    
+    issuer = x509.Name([
+        x509.NameAttribute(NameOID.COMMON_NAME, "Gateway"),
     ])
     
     builder = x509.CertificateBuilder(

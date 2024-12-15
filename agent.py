@@ -1,12 +1,8 @@
 import socket
-import threading
 import pickle
 import os
 import signal
-import sys
-import datetime
 from crypto_utils import *
-from chat import *
 from messages import CSR
 
 class Agent:
@@ -14,15 +10,23 @@ class Agent:
         self.name = name
         self.gateway_host = gateway_host
         self.gateway_port = gateway_port
-        self.public_key, self.private_key = generate_keypair()
+        self.chat_host = None
+        self.chat_port = None
+        self.public_key, self.private_key = None, None
         self.certificate = None
         self.gateway_certificate = None
+        
+    def generate_key_pair(self):
+        # Gerar um par de chaves RSA
+        self.public_key, self.private_key = generate_keypair()
+        print("Par de chaves gerado com sucesso! ")
         
         # senha secreta aleatória
         secret_key = os.urandom(32)
         agent_enc_pr_key = encrypt_private_key(self.private_key, secret_key)     
         print("Chave privada encriptada guardada com sucesso! ")
 
+    
     """Enviar chave pública para a Gateway."""
     def send_public_key(self, client_socket):
         try:
@@ -66,6 +70,36 @@ class Agent:
         
         except Exception as e:
             print(f"Erro ao solicitar certificado: {e}")
+    
+                
+    
+    # Juntar-se ao chat
+    def join_chat(self):
+        
+        #Pede input para inserir o host e a porta do chat a que se pretende juntar
+        print(" ")
+        input_chat_host = input("Insira o host do chat pretendido (ex:127.0.0.2): ").strip()
+        input_chat_port = int(input("Insira a porta do chat pretendido (ex.65433): ").strip())
+        
+        # Verifica se o host e a porta estão disponíveis e atribui-os
+        if input_chat_host or input_chat_port:
+            self.chat_host = input_chat_host
+            self.chat_port = input_chat_port
+        
+        print(f" Conectado ao chat Host: {self.chat_host}, Port: {self.chat_port}")
+        
+        try:
+            # Enviar o nome do agente e o host e port para o chat
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                client_socket.connect((self.chat_host, self.chat_port))
+                print("Conexão com o chat estabelecida com sucesso! ")
+                
+                # Enviar o nome do agente para o servidor de chat
+                client_socket.sendall(self.name.encode('utf-8'))
+                print(f"Nome do agente '{self.name}' enviado ao servidor de chat.")
+                
+        except Exception as e:
+            print(f"Erro ao juntar-se ao chat: {e}")
             
     
     """Criar conexão com a Gateway."""
@@ -75,6 +109,9 @@ class Agent:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
                 client_socket.connect((self.gateway_host, self.gateway_port))
                 print("Conexão criada com sucesso! ")
+                
+                # Gerar novas chaves RSA
+                self.generate_key_pair()
         
                 #Enviar chave pública para a Gateway.
                 self.send_public_key(client_socket)
@@ -94,32 +131,28 @@ class Agent:
         except Exception as e:
             print(f"Erro ao criar conexão: {e}")
             
-    # Criar o chat seguro
-    def create_chat(self):
-        chat = Chat()
-        chat.start()
-        
-            
+    
+    # Mostrar opções disponíveis        
     def show_options(self):
         print(" ")
         print("********************************************")
         print("*****   Bem vindo ao seu chat seguro!  *****")
         print("********************************************")
         print(" ")
-        print("[1] - Criar novo chat;")
-        print("[2] - Procurar chats existentes;")
-        print("[3] - Renovar certificado;")
+        print("[1] - Conectar a um chat;")
+        print("[2] - Renovar certificado;")
+        print("[3] - Sair;")
         print(" ")
         
         option = input(f"{self.name}! Escolha a opção pretendida: ")
         if option == "1":
-            self.create_chat()
+            self.join_chat()
         elif option == "2":
-            self.search_chats()
-        elif option == "3":
             self.create_connection()
             self.show_options()
+        elif option == "3":
+            # Terminar o terminal como se usasse o Control+C
+            os.kill(os.getpid(), signal.SIGINT)
         else:
             print("Opção inválida.")
             self.show_options()
-        # Adicione mais opções conforme necessário
