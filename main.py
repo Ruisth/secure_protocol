@@ -4,7 +4,7 @@ from agent import Agent
 from chat import Chat
 
 if __name__ == "__main__":
-    mode = input("Escolha o modo: 'gateway', 'agent' ou 'chat': ").strip().lower()
+    mode = input("Escolha o modo: 'gateway' ou 'agent': ").strip().lower()
 
     if mode == "gateway":
         gateway = Gateway()
@@ -14,8 +14,5 @@ if __name__ == "__main__":
         agent = Agent(name)
         agent.create_connection()
         agent.show_options()
-    elif mode == "chat":
-        chat = Chat()
-        chat.start_chat()
     else:
         print("Modo inválido.")

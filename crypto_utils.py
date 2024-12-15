@@ -10,6 +10,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography import x509
 from messages import Certificate
 from cryptography.x509.oid import NameOID
+from cryptography.exceptions import InvalidSignature
 
 
 def generate_keypair():
@@ -24,6 +25,10 @@ def encrypt_private_key(private_key, password):
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.BestAvailableEncryption(password)
     )
+    
+
+def encrypt_with_public_key(public_key, data):
+    return public_key.encrypt(data, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
 
 
 def sign_data(data, private_key):
@@ -60,6 +65,28 @@ def create_certificate(name, public_key, expiration_date, issuer_private_key):
     return certificate
 
 
+# Valida um certificado
+def validate_certificate(agent_certificate, gateway_certificate):
+    try:
+        # Extrai  a chave publica do certificado da Gateway
+        gateway_public_key = gateway_certificate.public_key()
+        
+        # Verifica a assinatura do certificado do agente
+        gateway_public_key.verify(
+            agent_certificate.signature,
+            agent_certificate.tbs_certificate_bytes,
+            padding.PKCS1v15(),
+            agent_certificate.signature_hash_algorithm
+        )
+        print(f"Certificado validado com sucesso! ")
+        return True
+    except InvalidSignature:
+        return False
+    except Exception as e:
+        print(f"Erro ao validar o certificado: {e}")
+        return False
+
+
 # Serialization for public key
 def serialize_public_key(public_key):
     return public_key.public_bytes(
@@ -80,6 +107,20 @@ def serialize_certificate(certificate):
 # Deserialization of certificate
 def deserialize_certificate(certificate_bytes):
     return x509.load_pem_x509_certificate(certificate_bytes)
+
+
+# Encriptar mensagem com AES
+def encrypt_message(message, key, iv):
+    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    return encryptor.update(message) + encryptor.finalize()
+
+
+# Desencriptar mensagem com AES
+def decrypt_message(ciphertext, key, iv):
+    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    return decryptor.update(ciphertext) + decryptor.finalize()
 
 
     

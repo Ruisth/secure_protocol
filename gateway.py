@@ -15,6 +15,7 @@ class Gateway:
         self.port = port
         self.agents_certificates = {}  # Armazena certificados emitidos para os agentes
         self.agents_public_keys = {}  # Armazena chaves públicas dos agentes
+        self.registered_agents = {}  # {address: (name, ip, port)}
         self.public_key, self.private_key = generate_keypair()
         
         # senha secreta aleatória
@@ -41,7 +42,9 @@ class Gateway:
     def receive_agent_key(self, conn, addr):
         # Receber chave pública do agente
         try:
-            agent_public_key = pickle.loads(conn.recv(16384))
+            data = conn.recv(16384)
+            print(f"Raw data received from {addr}: {data}")  # Debug message
+            agent_public_key = pickle.loads(data)
             print("Chave pública recebida e carregada com sucesso! ")
             self.agents_public_keys[addr] = deserialize_public_key(agent_public_key)
         except Exception as e:
@@ -89,6 +92,16 @@ class Gateway:
             print(f"Erro ao receber CSR do agente {addr}: {e}")
         
 
+    # regista um agente
+    def register_agent(self, addr):
+        """Registra um agente na lista de agentes conectados."""
+        try:
+            self.registered_agents[addr] = (addr)
+            print(f"Agente registado: {addr}")
+        except Exception as e:
+            print(f"Erro ao registar o agente {addr}: {e}")
+    
+
     def handle_agent(self, conn, addr):
         """Processar uma conexão de agente e emitir um certificado."""
         try:
@@ -105,7 +118,10 @@ class Gateway:
             
             # Receber o CSR do agente e emitir um certificado
             self.receive_agent_cert_request(conn, addr)
-          
+            
+            # Registrar agente
+            self.register_agent(addr)
+
         except Exception as e:
             print(f"Erro ao lidar com o agente {addr}: {e}")
         finally:
