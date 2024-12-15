@@ -35,7 +35,22 @@ class Chat:
         # Mostra o array de clientes
         print(f"Clientes conectados: {self.clients}")
         print(f"Nomes dos clientes: {self.client_names}")
+        
     
+    # Permite a troca de certificados entre os agents
+    def get_agents_info(self, requester_name, target_name):
+        try:
+            # Busca o cliente-alvo pelo nome
+            for client, name in self.clients:
+                if name == target_name:
+                    # Retorna o endereço do cliente-alvo
+                    client_host, client_port = client.getpeername()
+                    return client_host, client_port
+            return None, None  # Cliente não encontrado
+        except Exception as e:
+            print(f"Erro ao obter informações do cliente: {e}")
+            return None, None
+            
     
     # Remove um cliente do chat
     def remove_client(self, client_socket, client_address):
@@ -52,6 +67,8 @@ class Chat:
         # Conexão estabelecida com o cliente
         print(f"Conexão estabelecida com o cliente {addr}")
         
+        self.add_client(conn, addr)
+        
     
     
     # Inicia o servidor de chat
@@ -60,7 +77,7 @@ class Chat:
         # Pede input de um host e de um port
         print(" ")
         input_host = input("Insira o host do servidor de chat (ex: 127.0.0.2): ").strip()
-        input_port = int(input("Insira a porta do servidor de chat (ex.65433): ").strip())
+        input_port = int(input("Insira a porta do servidor de chat (ex: 65433): ").strip())
         
         # Verifica se o host e a porta estão disponíveis e atribui-os
         if input_host or input_port:

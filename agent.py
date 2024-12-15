@@ -71,15 +71,72 @@ class Agent:
         except Exception as e:
             print(f"Erro ao solicitar certificado: {e}")
     
+    
+    # Troca de certificados com outros agents
+    def exchange_certificates_with_agents(self, client_socket):
+        try:
+             # Solicitar informações dos outros dois agentes
+            peer_names = [name for name in self.client_names if name != self.name]  # Ignora o próprio nome
+            peer_certificates = {}
+
+            for peer_name in peer_names:
+                # Obter o host e a porta do agente alvo
+                target_host, target_port = self.request_peer_info(peer_name, client_socket)
+                if target_host:
+                    print(f"Conectando ao agente {peer_name} em {target_host}:{target_port}...")
+                    
+                    # Conectar diretamente com o agente alvo e trocar certificados
+                    target_certificate = self.exchange_certificates(target_host, target_port)
+                    if target_certificate:
+                        peer_certificates[peer_name] = target_certificate
+                else:
+                    print(f"Não foi possível encontrar o agente {peer_name}")
+
+            return peer_certificates
+        except Exception as e:
+            print(f"Erro ao trocar certificados com os pares: {e}")
+            return None    
+        
+        
+    # Aguarda pelos certificados dos outros agents    
+    def wait_for_certificates_from_peers(self):
+        try:
+            # Abrir um socket para aceitar conexões
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+                server_socket.bind((self.chat_host, self.chat_port))
+                server_socket.listen(2)  # Espera por dois outros agentes
+                print(f"Aguardando conexões para troca de certificados em {self.chat_host}:{self.chat_port}")
                 
+                peer_certificates = {}
+
+                for _ in range(2):  # Espera por 2 conexões (dos outros dois agentes)
+                    conn, addr = server_socket.accept()
+                    with conn:
+                        print(f"Conexão estabelecida com {addr}")
+                        
+                        # Receber o certificado do outro agente
+                        peer_certificate = pickle.loads(conn.recv(16384))
+                        peer_name = conn.recv(1024).decode('utf-8').strip()  # Nome do agente
+                        peer_certificates[peer_name] = peer_certificate
+                        print(f"Certificado recebido de {peer_name}")
+                        
+                        # Enviar o próprio certificado para o agente
+                        conn.sendall(pickle.dumps(self.certificate))
+                        print("Certificado enviado.")
+                    
+                return peer_certificates
+        except Exception as e:
+            print(f"Erro ao esperar por troca de certificados: {e}")
+            return None
+        
     
     # Juntar-se ao chat
     def join_chat(self):
         
         #Pede input para inserir o host e a porta do chat a que se pretende juntar
         print(" ")
-        input_chat_host = input("Insira o host do chat pretendido (ex:127.0.0.2): ").strip()
-        input_chat_port = int(input("Insira a porta do chat pretendido (ex.65433): ").strip())
+        input_chat_host = input("Insira o host do chat pretendido (ex: 127.0.0.2): ").strip()
+        input_chat_port = int(input("Insira a porta do chat pretendido (ex: 65433): ").strip())
         
         # Verifica se o host e a porta estão disponíveis e atribui-os
         if input_chat_host or input_chat_port:
